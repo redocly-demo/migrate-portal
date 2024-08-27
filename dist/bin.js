@@ -3238,7 +3238,7 @@ export const frontmatter = ${JSON.stringify(frontmatter, null, 2)};
 
 ${frontmatterStr}export default function Page() {
   return <div>TODO: migrate manually</div>;
-  /* Original content:
+  /* Original code:
 ` + rest.split("\n").map((line) => `    ${line.replace("/*", "").replace("*/", "")}`).join("\n") + `
   */
 }
