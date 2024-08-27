@@ -2715,7 +2715,7 @@ async function migrate() {
   migrateTheme();
   runNpmInstall();
   migrationInstructions += `
- ## Adjust config
+## Adjust config
 
 - Consider removing the following from your redocly.yaml if you are able to solve all Markdoc and link issues:
   \`\`\`yaml
@@ -3075,7 +3075,6 @@ function migrateRbac(fsInfo) {
     const permission = permissions.permission;
     const teams = rbacPermissionToRoles[permission] || [permission];
     const content = {};
-    debugger;
     rbacContent[path.dirname(filePath) + "/**"] = content;
     for (const team of teams) {
       content[team] = "read";
@@ -3083,7 +3082,8 @@ function migrateRbac(fsInfo) {
     fs.unlinkSync(filePath);
   }
   if (permissionsFiles.length === 0 || fs.existsSync("rbac.yaml")) {
-    migrationInstructions += `## RBAC
+    migrationInstructions += `
+## RBAC
 
 Please, review RBAC changes as the RBAC configuration format has changed completely: https://redocly.com/docs/realm/setup/concepts/rbac
 

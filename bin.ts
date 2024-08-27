@@ -485,7 +485,6 @@ function migrateRbac(fsInfo: FsInfo) {
     const permission = permissions.permission;
     const teams = rbacPermissionToRoles[permission] || [permission];
     const content = {};
-    debugger;
     rbacContent[path.dirname(filePath) + '/**'] = content;
     for (const team of teams) {
       content[team] = 'read';
