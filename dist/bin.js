@@ -3229,16 +3229,18 @@ Please, review and migrate MDX files manually:
 export const frontmatter = ${JSON.stringify(frontmatter, null, 2)};
 
 ` : "";
+    const [imports, rest] = newContent.split(/(?:\r?\n)+export default LandingLayout;(?:\r?\n)+/);
     fs.writeFileSync(
       newFilePath,
       `import * as React from 'react';
 
-// import { WideTile, Jumbotron } from '@redocly/portal-legacy-ui';
+` + imports.split("\n").map((line) => `// ${line}`).join("\n").replaceAll("@redocly/developer-portal/ui", "@redocly/portal-legacy-ui") + `
 
 ${frontmatterStr}export default function Page() {
   return <div>TODO: migrate manually</div>;
-  /*
-` + newContent.split("\n").map((line) => `  ${line}`).join("\n") + `  */
+  /* Original content:
+` + rest.split("\n").map((line) => `    ${line.replace("/*", "").replace("*/", "")}`).join("\n") + `
+  */
 }
 `
     );

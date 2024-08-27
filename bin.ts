@@ -671,20 +671,26 @@ function migrateMdx(fsInfo: FsInfo) {
       ? `\n\nexport const frontmatter = ${JSON.stringify(frontmatter, null, 2)};\n\n`
       : '';
 
-    // TODO: improve
+    const [imports, rest] = newContent.split(/(?:\r?\n)+export default LandingLayout;(?:\r?\n)+/);
+
     fs.writeFileSync(
       newFilePath,
       `import * as React from 'react';\n\n` +
-        `// import { WideTile, Jumbotron } from '@redocly/portal-legacy-ui';\n\n` +
+        imports
+          .split('\n')
+          .map(line => `// ${line}`)
+          .join('\n')
+          .replaceAll('@redocly/developer-portal/ui', '@redocly/portal-legacy-ui') +
+        `\n\n` +
         `${frontmatterStr}` +
         `export default function Page() {\n` +
         `  return <div>TODO: migrate manually</div>;\n` +
-        `  /*\n` +
-        newContent
+        `  /* Original code:\n` +
+        rest
           .split('\n')
-          .map(line => `  ${line}`)
+          .map(line => `    ${line.replace('/*', '').replace('*/', '')}`)
           .join('\n') +
-        `  */\n` +
+        `\n  */\n` +
         `}\n`
     );
     fs.unlinkSync(filePath);
