@@ -9,6 +9,10 @@ type FsInfo = {
 };
 
 const fileRbacPermissions: Record<string, string> = {};
+const rbacContent = {};
+
+const rbacPermissionToRoles: Record<string, string[]> = {};
+
 const partialFolders = new Set();
 const apis: Record<string, any> = {};
 const ignore: string[] = ['_*'];
@@ -55,6 +59,8 @@ export async function migrate() {
 
   let fsInfo = getFsInfo('.');
 
+  prepareRbacMigration();
+
   await migratePackageJson();
   await migrateOpenAPI(fsInfo);
   migrateMdx(fsInfo);
@@ -62,6 +68,7 @@ export async function migrate() {
   fsInfo = getFsInfo('.'); // get fsInfo again after migrating mdx files
   migrateMarkdown(fsInfo);
   migrateSidebars(fsInfo);
+  migrateRbac(fsInfo);
   migrateConfig();
   migrateOverrides();
   migrateTheme();
@@ -69,7 +76,7 @@ export async function migrate() {
   runNpmInstall();
 
   migrationInstructions +=
-    '\n ## Adjust config\n\n' +
+    '\n## Adjust config\n\n' +
     '- Consider removing the following from your redocly.yaml if you are able to solve all Markdoc and link issues:\n' +
     `  \`\`\`yaml
   reunite:
@@ -106,7 +113,7 @@ function migrateMarkdown(fsInfo: FsInfo) {
   for (const filePath of markdownFiles) {
     const content = fs.readFileSync(filePath, 'utf8');
 
-    const admonitionRegex = /:::(\w+)(?: +(.+?)\n|\s*\n)([\s\S]+?)(:::|$)/g;
+    const admonitionRegex = /:::(\w+)(?: +(.+?)\r?\n|\s*\r?\n)([\s\S]+?)(:::|$)/g;
     let newContent = content.replace(admonitionRegex, (_, type, title, text) => {
       type = type.trim();
       type = type === 'attention' ? 'info' : type;
@@ -125,7 +132,7 @@ function migrateMarkdown(fsInfo: FsInfo) {
       return `{% partial file="${src}" /%}`;
     });
 
-    newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\n)([\s\S]+?)```/g, (_, lang, title, content) => {
+    newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\r?\n)([\s\S]+?)```/g, (_, lang, title, content) => {
       return title ? `\`\`\`${lang} {% title="${title}" %}\n${content}\`\`\`` : `\`\`\`${lang}${content}\`\`\``;
     });
 
@@ -449,9 +456,52 @@ function migrateTheme() {
     `Remove the \`theme.ts\` file after migration.\n`;
 }
 
-// @ts-ignore
-function migrateRbac() {
-  // TODO
+function prepareRbacMigration() {
+  if (!fs.existsSync('rbac.yaml')) return;
+  const rbac = yaml.load(fs.readFileSync('rbac.yaml', 'utf8')) as Record<string, any>;
+
+  for (const [teamName, details] of Object.entries(
+    rbac.roles as Record<string, { permissions: string[]; roles: string[] }>
+  )) {
+    for (const permission of details.permissions) {
+      rbacPermissionToRoles[permission] = rbacPermissionToRoles[permission] || [];
+      rbacPermissionToRoles[permission].push(teamName);
+      for (const [nestedTeam, nestedDetails] of Object.entries(
+        rbac.roles as Record<string, { permissions: string[]; roles: string[] }>
+      )) {
+        if (nestedTeam === teamName) continue;
+        if (nestedDetails.roles?.includes(teamName)) {
+          rbacPermissionToRoles[permission].push(nestedTeam);
+        }
+      }
+    }
+  }
+}
+
+function migrateRbac(fsInfo: FsInfo) {
+  const permissionsFiles = fsInfo.list(/permissions\.rbac\.yaml$/);
+  for (const filePath of permissionsFiles) {
+    const permissions = yaml.load(fs.readFileSync(filePath, 'utf8')) as Record<string, any>;
+    const permission = permissions.permission;
+    const teams = rbacPermissionToRoles[permission] || [permission];
+    const content = {};
+    debugger;
+    rbacContent[path.dirname(filePath) + '/**'] = content;
+    for (const team of teams) {
+      content[team] = 'read';
+    }
+    fs.unlinkSync(filePath);
+  }
+
+  if (permissionsFiles.length === 0 || fs.existsSync('rbac.yaml')) {
+    migrationInstructions +=
+      `\n## RBAC\n\n` +
+      `Please, review RBAC changes as the RBAC configuration format has changed completely: https://redocly.com/docs/realm/setup/concepts/rbac\n\n`;
+  }
+
+  if (fs.existsSync('rbac.yaml')) {
+    fs.unlinkSync('rbac.yaml');
+  }
 }
 
 function migrateConfig() {
@@ -473,6 +523,12 @@ function migrateConfig() {
         ? {
             ignoreMarkdocErrors: true,
             ignoreLinkChecker: true,
+          }
+        : undefined,
+    rbac:
+      Object.keys(rbacContent).length > 0
+        ? {
+            content: rbacContent,
           }
         : undefined,
     apis,
@@ -740,6 +796,11 @@ function processFrontMatter(content: string, filePath: string) {
   const frontmatter = yaml.load(frontMatterYaml) as Record<string, any>;
   if (frontmatter.permission) {
     fileRbacPermissions[filePath] = frontmatter.permission;
+    frontmatter.rbac = {};
+    for (const role of rbacPermissionToRoles[frontmatter.permission] || [frontmatter.permission]) {
+      frontmatter.rbac[role] = 'read';
+    }
+
     delete frontmatter.permission;
     changed = true;
   }

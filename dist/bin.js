@@ -2663,6 +2663,8 @@ var js_yaml_default = jsYaml;
 
 // bin.ts
 var fileRbacPermissions = {};
+var rbacContent = {};
+var rbacPermissionToRoles = {};
 var partialFolders = /* @__PURE__ */ new Set();
 var apis = {};
 var ignore = ["_*"];
@@ -2700,12 +2702,14 @@ async function migrate() {
     process.exit(1);
   }
   let fsInfo = getFsInfo(".");
+  prepareRbacMigration();
   await migratePackageJson();
   await migrateOpenAPI(fsInfo);
   migrateMdx(fsInfo);
   fsInfo = getFsInfo(".");
   migrateMarkdown(fsInfo);
   migrateSidebars(fsInfo);
+  migrateRbac(fsInfo);
   migrateConfig();
   migrateOverrides();
   migrateTheme();
@@ -2747,7 +2751,7 @@ function migrateMarkdown(fsInfo) {
   }
   for (const filePath of markdownFiles) {
     const content = fs.readFileSync(filePath, "utf8");
-    const admonitionRegex = /:::(\w+)(?: +(.+?)\n|\s*\n)([\s\S]+?)(:::|$)/g;
+    const admonitionRegex = /:::(\w+)(?: +(.+?)\r?\n|\s*\r?\n)([\s\S]+?)(:::|$)/g;
     let newContent = content.replace(admonitionRegex, (_, type2, title, text) => {
       type2 = type2.trim();
       type2 = type2 === "attention" ? "info" : type2;
@@ -2765,7 +2769,7 @@ ${text}{% /admonition %}`;
       }
       return `{% partial file="${src}" /%}`;
     });
-    newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\n)([\s\S]+?)```/g, (_, lang, title, content2) => {
+    newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\r?\n)([\s\S]+?)```/g, (_, lang, title, content2) => {
       return title ? `\`\`\`${lang} {% title="${title}" %}
 ${content2}\`\`\`` : `\`\`\`${lang}${content2}\`\`\``;
     });
@@ -3044,6 +3048,51 @@ Migrate theme settings manually: https://redocly.com/docs/realm/get-started/migr
 Remove the \`theme.ts\` file after migration.
 `;
 }
+function prepareRbacMigration() {
+  if (!fs.existsSync("rbac.yaml")) return;
+  const rbac = js_yaml_default.load(fs.readFileSync("rbac.yaml", "utf8"));
+  for (const [teamName, details] of Object.entries(
+    rbac.roles
+  )) {
+    for (const permission of details.permissions) {
+      rbacPermissionToRoles[permission] = rbacPermissionToRoles[permission] || [];
+      rbacPermissionToRoles[permission].push(teamName);
+      for (const [nestedTeam, nestedDetails] of Object.entries(
+        rbac.roles
+      )) {
+        if (nestedTeam === teamName) continue;
+        if (nestedDetails.roles?.includes(teamName)) {
+          rbacPermissionToRoles[permission].push(nestedTeam);
+        }
+      }
+    }
+  }
+}
+function migrateRbac(fsInfo) {
+  const permissionsFiles = fsInfo.list(/permissions\.rbac\.yaml$/);
+  for (const filePath of permissionsFiles) {
+    const permissions = js_yaml_default.load(fs.readFileSync(filePath, "utf8"));
+    const permission = permissions.permission;
+    const teams = rbacPermissionToRoles[permission] || [permission];
+    const content = {};
+    debugger;
+    rbacContent[path.dirname(filePath) + "/**"] = content;
+    for (const team of teams) {
+      content[team] = "read";
+    }
+    fs.unlinkSync(filePath);
+  }
+  if (permissionsFiles.length === 0 || fs.existsSync("rbac.yaml")) {
+    migrationInstructions += `## RBAC
+
+Please, review RBAC changes as the RBAC configuration format has changed completely: https://redocly.com/docs/realm/setup/concepts/rbac
+
+`;
+  }
+  if (fs.existsSync("rbac.yaml")) {
+    fs.unlinkSync("rbac.yaml");
+  }
+}
 function migrateConfig() {
   const siteConfig = js_yaml_default.load(fs.readFileSync("siteConfig.yaml", "utf8"));
   if (siteConfig.apiCatalog) {
@@ -3060,6 +3109,9 @@ Please, migrate API catalog manually: https://redocly.com/docs/realm/get-started
     reunite: !siteConfig.linkChecker?.severity || siteConfig.linkChecker?.severity === "warning" ? {
       ignoreMarkdocErrors: true,
       ignoreLinkChecker: true
+    } : void 0,
+    rbac: Object.keys(rbacContent).length > 0 ? {
+      content: rbacContent
     } : void 0,
     apis,
     seo: siteConfig.seo || void 0,
@@ -3282,6 +3334,10 @@ function processFrontMatter(content, filePath) {
   const frontmatter = js_yaml_default.load(frontMatterYaml);
   if (frontmatter.permission) {
     fileRbacPermissions[filePath] = frontmatter.permission;
+    frontmatter.rbac = {};
+    for (const role of rbacPermissionToRoles[frontmatter.permission] || [frontmatter.permission]) {
+      frontmatter.rbac[role] = "read";
+    }
     delete frontmatter.permission;
     changed = true;
   }
