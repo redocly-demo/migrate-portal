@@ -68,6 +68,18 @@ export async function migrate() {
 
   runNpmInstall();
 
+  migrationInstructions +=
+    '\n ## Adjust config\n\n' +
+    '- Consider removing the following from your redocly.yaml if you are able to solve all Markdoc and link issues:\n\n' +
+    `\`\`\`yaml
+  reunite:
+    ignoreMarkdocErrors: true
+    ignoreLinkChecker: true
+  \`\`\`\n\n`;
+
+  migrationInstructions +=
+    '- In addition, if you want your website to be public, remove the `requiresLogin: true` from `redocly.yaml`.\n\n';
+
   console.log(green('\n\n🎉 Migration completed successfully'));
   if (migrationInstructions !== defaultMigrationInstructions) {
     console.log(`⚠️ There are some manual steps required, see ${blue('_MIGRATION.md')}.`);
@@ -112,7 +124,9 @@ function migrateMarkdown(fsInfo: FsInfo) {
       return `{% partial file="${src}" /%}`;
     });
 
-    newContent = newContent.replace(/```(\w+)?\s+(.+)\n([\s\S]+?)```/g, '```$1 {% title="$2" %}\n$3```');
+    newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\n)([\s\S]+?)```/g, (_, lang, title, content) => {
+      return title ? `\`\`\`${lang} {% title="${title}" %}${content}\`\`\`` : `\`\`\`${lang}${content}\`\`\``;
+    });
 
     const { frontmatter, changed, len } = processFrontMatter(newContent, filePath);
 
@@ -183,7 +197,7 @@ function migrateSidebars(fsInfo: FsInfo) {
       }
     } else {
       Object.entries(data).forEach(([key, data], idx) => {
-        const newData = transformSidebarItems(data, filePath);
+        const newData = transformSidebarItems(data as any, filePath);
         const prefix = idx === 0 ? '' : slug(key) + '.';
         const newName = prefix + 'sidebars.yaml';
         if (!dequal(data, newData)) {
@@ -833,8 +847,9 @@ function hiddenQuestion(query: string): Promise<string> {
       input: process.stdin,
       output: process.stdout,
     });
-    const stdin = process.openStdin();
-    process.stdin.on('data', (char: string) => {
+    process.stdin.resume();
+    const stdin = process.stdin;
+    stdin.on('data', (char: string) => {
       char = char + '';
       switch (char) {
         case '\n':

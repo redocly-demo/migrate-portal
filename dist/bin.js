@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -2711,6 +2709,19 @@ async function migrate() {
   migrateOverrides();
   migrateTheme();
   runNpmInstall();
+  migrationInstructions += `
+ ## Adjust config
+
+- Consider removing the following from your redocly.yaml if you are able to solve all Markdoc and link issues:
+
+\`\`\`yaml
+  reunite:
+    ignoreMarkdocErrors: true
+    ignoreLinkChecker: true
+  \`\`\`
+
+`;
+  migrationInstructions += "- In addition, if you want your website to be public, remove the `requiresLogin: true` from `redocly.yaml`.\n\n";
   console.log(green("\n\n\u{1F389} Migration completed successfully"));
   if (migrationInstructions !== defaultMigrationInstructions) {
     console.log(`\u26A0\uFE0F There are some manual steps required, see ${blue("_MIGRATION.md")}.`);
@@ -2753,7 +2764,9 @@ ${text}{% /admonition %}`;
       }
       return `{% partial file="${src}" /%}`;
     });
-    newContent = newContent.replace(/```(\w+)?\s+(.+)\n([\s\S]+?)```/g, '```$1 {% title="$2" %}\n$3```');
+    newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\n)([\s\S]+?)```/g, (_, lang, title, content2) => {
+      return title ? `\`\`\`${lang} {% title="${title}" %}${content2}\`\`\`` : `\`\`\`${lang}${content2}\`\`\``;
+    });
     const { frontmatter, changed, len } = processFrontMatter(newContent, filePath);
     if (changed) {
       if (Object.keys(frontmatter || {}).length === 0) {
@@ -3355,8 +3368,9 @@ function hiddenQuestion(query) {
       input: process.stdin,
       output: process.stdout
     });
-    const stdin = process.openStdin();
-    process.stdin.on("data", (char) => {
+    process.stdin.resume();
+    const stdin = process.stdin;
+    stdin.on("data", (char) => {
       char = char + "";
       switch (char) {
         case "\n":

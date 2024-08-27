@@ -12,6 +12,7 @@
   "author": "Roman Hotsiy <roman@redocly.com>",
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^22.5.0",
     "esbuild": "^0.23.1",
     "js-yaml": "^4.1.0"
   }
