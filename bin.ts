@@ -70,8 +70,8 @@ export async function migrate() {
 
   migrationInstructions +=
     '\n ## Adjust config\n\n' +
-    '- Consider removing the following from your redocly.yaml if you are able to solve all Markdoc and link issues:\n\n' +
-    `\`\`\`yaml
+    '- Consider removing the following from your redocly.yaml if you are able to solve all Markdoc and link issues:\n' +
+    `  \`\`\`yaml
   reunite:
     ignoreMarkdocErrors: true
     ignoreLinkChecker: true
@@ -493,7 +493,7 @@ function migrateConfig() {
     navbar: migrateNavbar(siteConfig),
     footer: migrateFooter(siteConfig),
     search: siteConfig.nav?.some((i: any) => i.search) ? undefined : { hide: true },
-    analytics: siteConfig.analytics,
+    analytics: migrateAnalytics(siteConfig.analytics),
     codeSnippet: siteConfig.copyCodeSnippet
       ? {
           copy: {
@@ -552,6 +552,20 @@ function migrateConfig() {
     return {
       items: siteConfig.nav?.filter((i: any) => !i.search),
     };
+  }
+
+  function migrateAnalytics(analytics: any) {
+    if (!analytics) return undefined;
+    if (analytics.gtag && analytics.gtag.trackingIds.length === 1) {
+      return {
+        ...analytics,
+        ga: {
+          trackingId: analytics.gtag.trackingIds[0],
+        },
+        gtag: undefined,
+      };
+    }
+    return analytics;
   }
 
   function migrateFooter(siteConfig: any) {

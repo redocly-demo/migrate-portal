@@ -2713,8 +2713,7 @@ async function migrate() {
  ## Adjust config
 
 - Consider removing the following from your redocly.yaml if you are able to solve all Markdoc and link issues:
-
-\`\`\`yaml
+  \`\`\`yaml
   reunite:
     ignoreMarkdocErrors: true
     ignoreLinkChecker: true
@@ -3073,7 +3072,7 @@ Please, migrate API catalog manually: https://redocly.com/docs/realm/get-started
     navbar: migrateNavbar(siteConfig),
     footer: migrateFooter(siteConfig),
     search: siteConfig.nav?.some((i) => i.search) ? void 0 : { hide: true },
-    analytics: siteConfig.analytics,
+    analytics: migrateAnalytics(siteConfig.analytics),
     codeSnippet: siteConfig.copyCodeSnippet ? {
       copy: {
         hide: !siteConfig.copyCodeSnippet.enable
@@ -3113,6 +3112,19 @@ Please, migrate API catalog manually: https://redocly.com/docs/realm/get-started
     return {
       items: siteConfig2.nav?.filter((i) => !i.search)
     };
+  }
+  function migrateAnalytics(analytics) {
+    if (!analytics) return void 0;
+    if (analytics.gtag && analytics.gtag.trackingIds.length === 1) {
+      return {
+        ...analytics,
+        ga: {
+          trackingId: analytics.gtag.trackingIds[0]
+        },
+        gtag: void 0
+      };
+    }
+    return analytics;
   }
   function migrateFooter(siteConfig2) {
     if (!siteConfig2.footer) return void 0;
