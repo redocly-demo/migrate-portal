@@ -111,7 +111,8 @@ function migrateMarkdown(fsInfo: FsInfo) {
       type = type.trim();
       type = type === 'attention' ? 'info' : type;
       text = text.endsWith('\n') ? text : text + '\n';
-      return `{% admonition type="${type}" name="${title || capitalize(type)}" %}\n${text}{% /admonition %}`;
+      const titleReplacement = title ? ` name="${title}" ` : '';
+      return `{% admonition type="${type}"${titleReplacement}%}\n${text}{% /admonition %}`;
     });
 
     const embedRegex = /<embed\s+src="(.*?)"\s+\/>/g;

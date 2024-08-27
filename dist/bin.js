@@ -2752,7 +2752,8 @@ function migrateMarkdown(fsInfo) {
       type2 = type2.trim();
       type2 = type2 === "attention" ? "info" : type2;
       text = text.endsWith("\n") ? text : text + "\n";
-      return `{% admonition type="${type2}" name="${title || capitalize(type2)}" %}
+      const titleReplacement = title ? ` name="${title}" ` : "";
+      return `{% admonition type="${type2}"${titleReplacement}%}
 ${text}{% /admonition %}`;
     });
     const embedRegex = /<embed\s+src="(.*?)"\s+\/>/g;
@@ -3415,9 +3416,6 @@ function green(text) {
 }
 function red(text) {
   return `\x1B[31m${text}\x1B[0m`;
-}
-function capitalize(str2) {
-  return str2.charAt(0).toUpperCase() + str2.slice(1);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
