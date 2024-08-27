@@ -2765,7 +2765,8 @@ ${text}{% /admonition %}`;
       return `{% partial file="${src}" /%}`;
     });
     newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\n)([\s\S]+?)```/g, (_, lang, title, content2) => {
-      return title ? `\`\`\`${lang} {% title="${title}" %}${content2}\`\`\`` : `\`\`\`${lang}${content2}\`\`\``;
+      return title ? `\`\`\`${lang} {% title="${title}" %}
+${content2}\`\`\`` : `\`\`\`${lang}${content2}\`\`\``;
     });
     const { frontmatter, changed, len } = processFrontMatter(newContent, filePath);
     if (changed) {
@@ -2999,7 +3000,7 @@ async function migrateOpenAPI(fsInfo) {
           migrationInstructions += "OpenAPI files from registry has to be replaced with [Remote content](https://redocly.com/docs/realm/setup/how-to/remote-content)\n\n";
           addedRegistryRecord = true;
         }
-        migrationInstructions += `* Connect folder \`${dir}\`:
+        migrationInstructions += `- Connect folder \`${dir}\`:
 ${definitionInfo.readme}
 `;
       }
@@ -3141,7 +3142,8 @@ function migrateMdx(fsInfo) {
   if (mdxFiles.length === 0) {
     return;
   }
-  migrationInstructions += `## MDX files
+  migrationInstructions += `
+## MDX files
 
 Please, review and migrate MDX files manually:
 
@@ -3156,7 +3158,7 @@ Please, review and migrate MDX files manually:
         convertMdxToTsx(content, filePath);
         break;
     }
-    migrationInstructions += `* \`${path.relative(".", filePath)}\`
+    migrationInstructions += `- \`${path.relative(".", filePath)}\`
 `;
   }
   function detectMdxType(content) {
