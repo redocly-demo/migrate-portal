@@ -111,7 +111,7 @@ function migrateMarkdown(fsInfo: FsInfo) {
       type = type.trim();
       type = type === 'attention' ? 'info' : type;
       text = text.endsWith('\n') ? text : text + '\n';
-      return `{% admonition type="${type}" name="${title}" %}\n${text}{% /admonition %}`;
+      return `{% admonition type="${type}" name="${title || capitalize(type)}" %}\n${text}{% /admonition %}`;
     });
 
     const embedRegex = /<embed\s+src="(.*?)"\s+\/>/g;
@@ -882,4 +882,8 @@ function green(text: string) {
 
 function red(text: string) {
   return `\x1b[31m${text}\x1b[0m`;
+}
+
+function capitalize(str: string) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
