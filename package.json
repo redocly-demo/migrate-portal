@@ -6,7 +6,7 @@
   "bin": "dist/bin.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "esbuild bin.ts --bundle --platform=node --outfile=dist/bin.js"
+    "build": "esbuild bin.ts --bundle --platform=node --outfile=dist/bin.js --banner:js='#!/usr/bin/env node'"
   },
   "keywords": [],
   "author": "Roman Hotsiy <roman@redocly.com>",
