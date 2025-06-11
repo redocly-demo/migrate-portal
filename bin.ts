@@ -97,14 +97,14 @@ export async function migrate() {
 }
 
 function runNpmInstall() {
-  console.log('→ Running npm install');
+  console.log(blue('→ Running npm install'));
   if (fs.existsSync('yarn.lock')) fs.unlinkSync('yarn.lock');
   if (fs.existsSync('package-lock.json')) fs.unlinkSync('package-lock.json');
-  execSync('npm install', { stdio: 'inherit' });
+  execSync('npm install -f', { stdio: 'inherit' });
 }
 
 function migrateMarkdown(fsInfo: FsInfo) {
-  console.log('→ Migrating markdown files');
+  console.log(blue('→ Migrating markdown files'));
   const markdownFiles = fsInfo.list(/\.md$/);
   if (markdownFiles.length === 0) {
     return;
@@ -185,7 +185,7 @@ function migrateMarkdown(fsInfo: FsInfo) {
 }
 
 function migrateSidebars(fsInfo: FsInfo) {
-  console.log('→ Migrating sidebars files');
+  console.log(blue('→ Migrating sidebars files'));
   const sidebars = fsInfo.list(/sidebars\.yaml$/);
   if (sidebars.length === 0) {
     return;
@@ -228,9 +228,12 @@ function migrateSidebars(fsInfo: FsInfo) {
       } else {
         if (item.page?.endsWith('/*')) {
           if (item.page.endsWith('.page.yaml/*')) {
-            const pageYamlFile = path.relative('.', path.resolve(path.dirname(filePath), item.page.replace('/*', '')));
+            const pageYamlFile = item.page.startsWith('/')
+              ? item.page.slice(1).replace('/*', '')
+              : path.relative('.', path.resolve(path.dirname(filePath), item.page.replace('/*', '')));
             if (!renamedFiles[pageYamlFile]) {
-              throw new Error(`No renamed file found for ${pageYamlFile}`);
+              console.log(yellow(`[WARN] Potentially incorrect link in "${filePath}": ${pageYamlFile}`));
+              return item;
             }
             return {
               ...item,
@@ -273,17 +276,19 @@ function migrateSidebars(fsInfo: FsInfo) {
 }
 
 async function migratePackageJson() {
-  console.log('→ Migrating package.json');
+  console.log(blue('→ Migrating package.json'));
   const packageJsonPath = path.resolve('package.json');
   if (!fs.existsSync(packageJsonPath)) {
-    console.log('No package.json found. Ensure that you run the migration script from the root of the project');
+    console.log(red('No package.json found. Ensure that you run the migration script from the root of the project'));
     process.exit(1);
   }
 
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
   if (!packageJson.dependencies || !packageJson.dependencies['@redocly/developer-portal']) {
     console.log(
-      'No @redocly/developer-portal dependency found in package.json. Ensure that you run the migration script from the root of the project'
+      red(
+        'No @redocly/developer-portal dependency found in package.json. Ensure that you run the migration script from the root of the project'
+      )
     );
     process.exit(1);
   }
@@ -335,7 +340,7 @@ async function migratePackageJson() {
 }
 
 async function migrateOpenAPI(fsInfo: FsInfo) {
-  console.log('→ Migrating OpenAPI files');
+  console.log(blue('→ Migrating OpenAPI files'));
   const pageYamlFiles = fsInfo.list(/\.page\.yaml$/);
 
   const siteConfig = yaml.load(fs.readFileSync('siteConfig.yaml', 'utf8')) as Record<string, any>;
@@ -344,14 +349,20 @@ async function migrateOpenAPI(fsInfo: FsInfo) {
 
   let addedRegistryRecord = false;
 
+  console.log(blue('Migrating .page.yaml files'));
   for (const filePath of pageYamlFiles) {
     const pageYaml = yaml.load(fs.readFileSync(filePath, 'utf8')) as Record<string, any>;
+    if (!pageYaml) {
+      console.log(yellow(`[WARN] Broken page.yaml file at ${filePath}`));
+      continue;
+    }
+
     fs.unlinkSync(filePath);
     if (pageYaml.versions && pageYaml.versions.length > 1) {
       for (const version of pageYaml.versions) {
         const definitionId = version.definitionId;
         if (!definitionId) {
-          console.log(`No definitionId found for ${filePath}`);
+          console.log(yellow(`No definitionId found for ${filePath}`));
           continue;
         }
 
@@ -366,19 +377,20 @@ async function migrateOpenAPI(fsInfo: FsInfo) {
     } else {
       const definitionId = pageYaml.definitionId || pageYaml.versions?.[0]?.definitionId;
       if (!definitionId) {
-        console.log(`No definitionId found for ${filePath}`);
+        console.log(yellow(`No definitionId found for ${filePath}`));
         continue;
       }
 
       const renamed = await migratePageYaml(definitionId, pageYaml, filePath.replace('.page.yaml', '.yaml'), false);
       if (renamed) renamedFiles[path.normalize(filePath)] = renamed;
     }
+    console.log(green('✔') + ' ' + blue(filePath));
   }
 
   async function migratePageYaml(definitionId: string, pageYaml: any, targetPath: string, versioned: boolean) {
     const definitionPath = oasDefinitions[definitionId];
     if (!definitionPath) {
-      console.log(`No definition path found for ${definitionId}`);
+      console.log(yellow(`No definition path found for ${definitionId}`));
       return;
     }
 
@@ -393,7 +405,7 @@ async function migrateOpenAPI(fsInfo: FsInfo) {
 
       const definitionInfo = await tryFetchRemoteDefinition(definitionPath);
 
-      const newTargetPath = path.join(dir, definitionInfo?.baseName || path.basename(definitionPath));
+      const newTargetPath = path.join(dir, definitionInfo?.baseName || path.basename(definitionPath).split('?')[0]);
 
       apis[definitionId] = {
         ...apis[definitionId],
@@ -482,6 +494,10 @@ function migrateRbac(fsInfo: FsInfo) {
   const permissionsFiles = fsInfo.list(/permissions\.rbac\.yaml$/);
   for (const filePath of permissionsFiles) {
     const permissions = yaml.load(fs.readFileSync(filePath, 'utf8')) as Record<string, any>;
+    if (!permissions) {
+      console.log(yellow(`Broken permissions.rbac.yaml file: ${filePath}`));
+      continue;
+    }
     const permission = permissions.permission;
     const teams = rbacPermissionToRoles[permission] || [permission];
     const content = {};
@@ -634,7 +650,7 @@ function migrateConfig() {
 }
 
 function migrateMdx(fsInfo: FsInfo) {
-  console.log('→ Migrating MDX files');
+  console.log(blue('→ Migrating MDX files'));
   const mdxFiles = fsInfo.list(/\.mdx$/);
   if (mdxFiles.length === 0) {
     return;
@@ -686,7 +702,7 @@ function migrateMdx(fsInfo: FsInfo) {
         `export default function Page() {\n` +
         `  return <div>TODO: migrate manually</div>;\n` +
         `  /* Original code:\n` +
-        rest
+        (rest || newContent)
           .split('\n')
           .map(line => `    ${line.replace('/*', '').replace('*/', '')}`)
           .join('\n') +
@@ -739,7 +755,7 @@ function getFsInfo(contentDir: string): FsInfo {
     for (const entry of entries) {
       const fullPath = `${dir}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'public') {
+        if (entry.name === '.git' || entry.name === 'node_modules') {
           continue;
         }
         readdirDeep(fullPath);
@@ -825,6 +841,7 @@ function processFrontMatter(content: string, filePath: string) {
 }
 
 let token: string | null = null;
+let tokenReceivedLogged = false;
 
 async function tryFetchRemoteDefinition(definitionPath: string) {
   if (token === null) {
@@ -834,13 +851,21 @@ async function tryFetchRemoteDefinition(definitionPath: string) {
   }
 
   if (token === '') {
-    console.log('Skipping download of remote OpenAPI file');
+    console.log(yellow('Skipping download of remote OpenAPI file'));
     return null;
+  }
+
+  if (!tokenReceivedLogged) {
+    console.log(green('Token received, downloading files from Registry'));
+    tokenReceivedLogged = true;
   }
 
   if (token) {
     const baseURL = definitionPath.split('/registry')[0];
     const parts = definitionPath.slice(baseURL.length).split('/');
+    if (parts[2] !== 'bundle') {
+      parts.splice(1, 0, 'bundle');
+    }
     const orgId = decodeURIComponent(parts[3]);
     const definitionName = decodeURIComponent(parts[4]);
     const versionName = decodeURIComponent(parts[5]);
@@ -865,14 +890,14 @@ async function tryFetchRemoteDefinition(definitionPath: string) {
     }).then(res => res.json());
 
     if (!details.data?.def) {
-      console.log('Failed to fetch remote OpenAPI file details', details);
+      console.log(red('Failed to fetch remote OpenAPI file details'), details);
       return null;
     }
 
     const source = JSON.parse(details.data.def.source);
-    const rootFile = source.rootFile;
-    const dirName = path.dirname(source.rootFile);
-    const baseName = path.basename(rootFile);
+    const rootFile = source.rootFile || 'openapi.yaml';
+    const dirName = path.dirname(source.rootFile || 'openapi.yaml');
+    const baseName = path.basename(rootFile || 'openapi.yaml');
 
     let readme = '';
     if (details.data.def.sourceType === 'URL') {
@@ -909,7 +934,7 @@ async function tryFetchRemoteDefinition(definitionPath: string) {
       .then(res => {
         if ((res.status === 301 || res.status === 302 || res.status === 403 || res.status === 502) && token !== null) {
           token = '';
-          console.log('Invalid token provided. Skipping download of remote OpenAPI files');
+          console.log(red('Invalid token provided. Skipping download of remote OpenAPI files'));
         }
         if (res.ok) {
           return res.text();
@@ -951,6 +976,10 @@ function hiddenQuestion(query: string): Promise<string> {
       resolve(value);
     });
   });
+}
+
+function yellow(text: string) {
+  return `\x1b[33m${text}\x1b[0m`;
 }
 
 function blue(text: string) {
