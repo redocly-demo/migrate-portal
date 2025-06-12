@@ -23,6 +23,31 @@ const defaultMigrationInstructions = `# Manual migration instructions
 
 `;
 
+const knownHtmlTags = [
+  'a',
+  'b',
+  'br',
+  'code',
+  'div',
+  'em',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'i',
+  'img',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  'span',
+  'strong',
+  'ul',
+];
+
 let migrationInstructions = defaultMigrationInstructions;
 
 const emptyOas = (title: string) => `openapi: 3.1.0
@@ -73,6 +98,10 @@ export async function migrate() {
   migrateOverrides();
   migrateTheme();
 
+  if (fs.existsSync('theme.ts')) {
+    fs.unlinkSync('theme.ts');
+  }
+
   runNpmInstall();
 
   migrationInstructions +=
@@ -113,13 +142,18 @@ function migrateMarkdown(fsInfo: FsInfo) {
   for (const filePath of markdownFiles) {
     const content = fs.readFileSync(filePath, 'utf8');
 
-    const admonitionRegex = /:::(\w+)(?: +(.+?)\r?\n|\s*\r?\n)([\s\S]+?)(:::|$)/g;
-    let newContent = content.replace(admonitionRegex, (_, type, title, text) => {
-      type = type.trim();
+    const admonitionRegex = /(\n *)?:::(\w+)(?: +(.+?)\r?\n|\s*\r?\n)([\s\S]+?)(:::|$)/g;
+    let newContent = content.replace(admonitionRegex, (_, whitespace, type, title, text) => {
+      type = type.trim().toLowerCase();
       type = type === 'attention' ? 'info' : type;
+      type = type === 'tip' ? 'info' : type;
+      type = type === 'important' ? 'info' : type;
+      type = type === 'node' ? 'info' : type;
       text = text.endsWith('\n') ? text : text + '\n';
       const titleReplacement = title ? ` name="${title}" ` : '';
-      return `{% admonition type="${type}"${titleReplacement}%}\n${text}{% /admonition %}`;
+      return `\n${whitespace.slice(1)}{% admonition type="${type}"${titleReplacement}%}\n${text}${whitespace.slice(
+        1
+      )}{% /admonition %}`;
     });
 
     const embedRegex = /<embed\s+src="(.*?)"\s+\/>/g;
@@ -134,6 +168,19 @@ function migrateMarkdown(fsInfo: FsInfo) {
 
     newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\r?\n)([\s\S]+?)```/g, (_, lang, title, content) => {
       return title ? `\`\`\`${lang} {% title="${title}" %}\n${content}\`\`\`` : `\`\`\`${lang}${content}\`\`\``;
+    });
+
+    // migrate indented code blocks to backtricks
+    newContent = newContent.replace(/((?:^ {4,}[^`]+?\n)+)/g, (_, r) => `\`\`\`\n${r.replace(/^ {4,}/, '')}\`\`\``);
+
+    // replace <Alert> with {% admonition %}
+    newContent = newContent.replace(/(<\w+\s+\w+>)/g, '\\$1');
+    newContent = newContent.replace(/(<[A-Z]\w+>)g/g, '\\$1');
+    newContent = newContent.replace(/(<([\w_-]+)>)/g, (_, i) => {
+      if (knownHtmlTags.includes(i)) {
+        return i;
+      }
+      return `\\${i}`;
     });
 
     const { frontmatter, changed, len } = processFrontMatter(newContent, filePath);
@@ -216,15 +263,42 @@ function migrateSidebars(fsInfo: FsInfo) {
   }
 
   function transformSidebarItems(items: any[], filePath: string): any {
+    const migrateHref = (item: any) => {
+      if (item?.href?.startsWith('/')) {
+        const file = item.href.slice(1);
+        if (fs.existsSync(file + '.md') || fs.existsSync(file + '.page.tsx') || fs.existsSync(file + '.page.yaml')) {
+          return {
+            ...item,
+            page: item.href,
+            href: undefined,
+          };
+        }
+      }
+      return item;
+    };
+
+    const migrateRbac = (item: any) => {
+      if (item.permission) {
+        return {
+          ...item,
+          rbac: Object.fromEntries(rbacPermissionToRoles[item.permission].map((role: string) => [role, 'read'])),
+          permission: undefined,
+        };
+      }
+      return item;
+    };
+
     return items.map((item: any) => {
       // check for renamed files (page.yaml and mdx)
 
       if (item.pages) {
-        return {
-          ...item,
-          pages: undefined,
-          items: transformSidebarItems(item.pages, filePath),
-        };
+        return migrateRbac(
+          migrateHref({
+            ...item,
+            pages: undefined,
+            items: transformSidebarItems(item.pages, filePath),
+          })
+        );
       } else {
         if (item.page?.endsWith('/*')) {
           if (item.page.endsWith('.page.yaml/*')) {
@@ -233,18 +307,22 @@ function migrateSidebars(fsInfo: FsInfo) {
               : path.relative('.', path.resolve(path.dirname(filePath), item.page.replace('/*', '')));
             if (!renamedFiles[pageYamlFile]) {
               console.log(yellow(`[WARN] Potentially incorrect link in "${filePath}": ${pageYamlFile}`));
-              return item;
+              return migrateRbac(migrateHref(item));
             }
-            return {
-              ...item,
-              page: path.relative(path.dirname(filePath), renamedFiles[pageYamlFile]),
-            };
+            return migrateRbac(
+              migrateHref({
+                ...item,
+                page: path.relative(path.dirname(filePath), renamedFiles[pageYamlFile]),
+              })
+            );
           } else {
-            return {
-              ...item,
-              page: undefined,
-              directory: item.page.slice(0, -2),
-            };
+            return migrateRbac(
+              migrateHref({
+                ...item,
+                page: undefined,
+                directory: item.page.slice(0, -2),
+              })
+            );
           }
         }
         if (item.page?.endsWith('.page.yaml')) {
@@ -252,24 +330,24 @@ function migrateSidebars(fsInfo: FsInfo) {
           if (!renamedFiles[pageYamlFile]) {
             throw new Error(`No renamed file found for ${pageYamlFile}`);
           }
-          return {
+          return migrateRbac({
             ...item,
             group: item.label || item.group,
             page: path.relative(path.dirname(filePath), renamedFiles[pageYamlFile]),
-          };
+          });
         }
 
         if (item.page) {
           const relativeLink = path.relative('.', path.resolve(path.dirname(filePath), item.page));
           if (renamedFiles[relativeLink]) {
-            return {
+            return migrateRbac({
               ...item,
               page: path.relative(path.dirname(filePath), renamedFiles[relativeLink]),
-            };
+            });
           }
         }
 
-        return item;
+        return migrateRbac(migrateHref(item));
       }
     });
   }
@@ -611,6 +689,7 @@ function migrateConfig() {
             previousButton: { hide: !siteConfig.showPrevButton },
           }
         : undefined,
+    redirects: fs.existsSync('redirects.yaml') ? { $ref: 'redirects.yaml' } : undefined,
   };
 
   fs.writeFileSync(
@@ -722,6 +801,17 @@ function migrateMdx(fsInfo: FsInfo) {
       frontmatter && Object.keys(frontmatter).length > 0 ? `---\n${yaml.dump(frontmatter)}---\n\n` : '';
 
     const banner = `<!--\nThis file was automatically renamed from MDX to Markdown.\nPlease, review and update the content.\n-->\n\n`;
+
+    content = content.replace(/(import {(.|\n)*?} from .*;)/, '/**\n$1\n*/');
+
+    content = content.replace(
+      /<Alert variant="(.*?)">(.|\n)*?<\/Alert>/,
+      '{% admonition type="$1" %}\n\n$2\n\n{% /admonition %}'
+    );
+    content = content.replace(
+      /<Alert variant="(.*?)" header="(.*?)">(.|\n)*?<\/Alert>/,
+      '{% admonition type="$1"  name="$2"%}\n\n$3\n\n{% /admonition %}'
+    );
 
     fs.writeFileSync(newFilePath, `${frontmatterStr}${banner}${newContent}`);
     fs.unlinkSync(filePath);
