@@ -2784,11 +2784,14 @@ function migrateMarkdown(fsInfo) {
       type2 = type2 === "attention" ? "info" : type2;
       type2 = type2 === "tip" ? "info" : type2;
       type2 = type2 === "important" ? "info" : type2;
+      type2 = type2 === "node" ? "info" : type2;
       text = text.endsWith("\n") ? text : text + "\n";
       const titleReplacement = title ? ` name="${title}" ` : "";
       return `
 ${whitespace.slice(1)}{% admonition type="${type2}"${titleReplacement}%}
-${text}${whitespace.slice(1)}{% /admonition %}`;
+${text}${whitespace.slice(
+        1
+      )}{% /admonition %}`;
     });
     const embedRegex = /<embed\s+src="(.*?)"\s+\/>/g;
     newContent = newContent.replace(embedRegex, (_, src) => {
@@ -2806,8 +2809,8 @@ ${content2}\`\`\`` : `\`\`\`${lang}${content2}\`\`\``;
     newContent = newContent.replace(/((?:^ {4,}[^`]+?\n)+)/g, (_, r) => `\`\`\`
 ${r.replace(/^ {4,}/, "")}\`\`\``);
     newContent = newContent.replace(/(<\w+\s+\w+>)/g, "\\$1");
-    newContent = newContent.replace(/(<[A-Z]\w+>)g/, "\\$1");
-    newContent = newContent.replace(/(<(\w+)>)/g, (_, i) => {
+    newContent = newContent.replace(/(<[A-Z]\w+>)g/g, "\\$1");
+    newContent = newContent.replace(/(<([\w_-]+)>)/g, (_, i) => {
       if (knownHtmlTags.includes(i)) {
         return i;
       }
