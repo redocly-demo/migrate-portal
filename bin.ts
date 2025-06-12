@@ -46,6 +46,11 @@ const knownHtmlTags = [
   'span',
   'strong',
   'ul',
+  'table',
+  'thead',
+  'tr',
+  'td',
+  'tbody',
 ];
 
 let migrationInstructions = defaultMigrationInstructions;

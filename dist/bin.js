@@ -2694,7 +2694,12 @@ var knownHtmlTags = [
   "pre",
   "span",
   "strong",
-  "ul"
+  "ul",
+  "table",
+  "thead",
+  "tr",
+  "td",
+  "tbody"
 ];
 var migrationInstructions = defaultMigrationInstructions;
 var emptyOas = (title) => `openapi: 3.1.0
