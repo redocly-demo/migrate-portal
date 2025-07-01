@@ -2895,6 +2895,7 @@ function migrateSidebars(fsInfo) {
         if (fs.existsSync(file + ".md") || fs.existsSync(file + ".page.tsx") || fs.existsSync(file + ".page.yaml")) {
           return {
             ...item,
+            group: item.group || "",
             page: item.href,
             href: void 0
           };
@@ -2917,6 +2918,7 @@ function migrateSidebars(fsInfo) {
         return migrateRbac2(
           migrateHref({
             ...item,
+            group: item.group || "",
             pages: void 0,
             items: transformSidebarItems(item.pages, filePath)
           })
@@ -2952,7 +2954,7 @@ function migrateSidebars(fsInfo) {
           }
           return migrateRbac2({
             ...item,
-            group: item.label || item.group,
+            group: item.label || item.group || "",
             page: path.relative(path.dirname(filePath), renamedFiles[pageYamlFile])
           });
         }
