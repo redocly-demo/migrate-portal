@@ -2699,7 +2699,33 @@ var knownHtmlTags = [
   "thead",
   "tr",
   "td",
-  "tbody"
+  "tbody",
+  "th",
+  "figcaption",
+  "figure",
+  "details",
+  "summary",
+  "blockquote",
+  "cite",
+  "del",
+  "ins",
+  "sub",
+  "sup",
+  "u",
+  "video",
+  "audio",
+  "iframe",
+  "embed",
+  "object",
+  "param",
+  "script",
+  "select",
+  "small",
+  "source",
+  "colgroup",
+  "html",
+  "head",
+  "body"
 ];
 var migrationInstructions = defaultMigrationInstructions;
 var emptyOas = (title) => `openapi: 3.1.0
@@ -2745,7 +2771,6 @@ async function migrate() {
   if (fs.existsSync("theme.ts")) {
     fs.unlinkSync("theme.ts");
   }
-  runNpmInstall();
   migrationInstructions += `
 ## Adjust config
 
@@ -2768,12 +2793,6 @@ Remove this \`_MIGRATION.md\` file after migration.`;
     fs.writeFileSync("_MIGRATION.md", migrationInstructions);
   }
   console.log("Please, review the changes and commit them.");
-}
-function runNpmInstall() {
-  console.log(blue("\u2192 Running npm install"));
-  if (fs.existsSync("yarn.lock")) fs.unlinkSync("yarn.lock");
-  if (fs.existsSync("package-lock.json")) fs.unlinkSync("package-lock.json");
-  (0, import_node_child_process.execSync)("npm install -f", { stdio: "inherit" });
 }
 function migrateMarkdown(fsInfo) {
   console.log(blue("\u2192 Migrating markdown files"));
@@ -2813,10 +2832,21 @@ ${content2}\`\`\`` : `\`\`\`${lang}${content2}\`\`\``;
     });
     newContent = newContent.replace(/((?:^ {4,}[^`]+?\n)+)/g, (_, r) => `\`\`\`
 ${r.replace(/^ {4,}/, "")}\`\`\``);
-    newContent = newContent.replace(/(<\w+\s+\w+>)/g, "\\$1");
-    newContent = newContent.replace(/(<[A-Z]\w+>)g/g, "\\$1");
-    newContent = newContent.replace(/(<([\w_-]+)>)/g, (_, i) => {
-      if (knownHtmlTags.includes(i)) {
+    const codeBlockPositions = [];
+    let match;
+    const codeBlock = /```(.|\n)+?```/dg;
+    while ((match = codeBlock.exec(newContent)) !== null) {
+      codeBlockPositions.push(match.indices[0]);
+    }
+    const inlineCode = /`(.+?)`/dg;
+    while ((match = inlineCode.exec(newContent)) !== null) {
+      codeBlockPositions.push(match.indices[0]);
+    }
+    newContent = newContent.replace(/(<([\w_-]+)>)/g, (_, i, name, offset) => {
+      if (codeBlockPositions.some(([start, end]) => offset >= start && offset < end)) {
+        return i;
+      }
+      if (knownHtmlTags.includes(name)) {
         return i;
       }
       return `\\${i}`;

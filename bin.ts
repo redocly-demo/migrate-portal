@@ -51,6 +51,32 @@ const knownHtmlTags = [
   'tr',
   'td',
   'tbody',
+  'th',
+  'figcaption',
+  'figure',
+  'details',
+  'summary',
+  'blockquote',
+  'cite',
+  'del',
+  'ins',
+  'sub',
+  'sup',
+  'u',
+  'video',
+  'audio',
+  'iframe',
+  'embed',
+  'object',
+  'param',
+  'script',
+  'select',
+  'small',
+  'source',
+  'colgroup',
+  'html',
+  'head',
+  'body',
 ];
 
 let migrationInstructions = defaultMigrationInstructions;
@@ -107,7 +133,7 @@ export async function migrate() {
     fs.unlinkSync('theme.ts');
   }
 
-  runNpmInstall();
+  // runNpmInstall();
 
   migrationInstructions +=
     '\n## Adjust config\n\n' +
@@ -178,11 +204,23 @@ function migrateMarkdown(fsInfo: FsInfo) {
     // migrate indented code blocks to backtricks
     newContent = newContent.replace(/((?:^ {4,}[^`]+?\n)+)/g, (_, r) => `\`\`\`\n${r.replace(/^ {4,}/, '')}\`\`\``);
 
-    // replace <Alert> with {% admonition %}
-    newContent = newContent.replace(/(<\w+\s+\w+>)/g, '\\$1');
-    newContent = newContent.replace(/(<[A-Z]\w+>)g/g, '\\$1');
-    newContent = newContent.replace(/(<([\w_-]+)>)/g, (_, i) => {
-      if (knownHtmlTags.includes(i)) {
+    const codeBlockPositions: number[][] = [];
+    let match: RegExpExecArray | null;
+    const codeBlock = /```(.|\n)+?```/dg;
+    while ((match = codeBlock.exec(newContent)) !== null) {
+      codeBlockPositions.push(match.indices![0]);
+    }
+
+    const inlineCode = /`(.+?)`/dg;
+    while ((match = inlineCode.exec(newContent)) !== null) {
+      codeBlockPositions.push(match.indices![0]);
+    }
+
+    newContent = newContent.replace(/(<([\w_-]+)>)/g, (_, i, name, offset) => {
+      if (codeBlockPositions.some(([start, end]) => offset >= start && offset < end)) {
+        return i;
+      }
+      if (knownHtmlTags.includes(name)) {
         return i;
       }
       return `\\${i}`;
