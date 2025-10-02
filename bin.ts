@@ -133,7 +133,7 @@ export async function migrate() {
     fs.unlinkSync('theme.ts');
   }
 
-  // runNpmInstall();
+  runNpmInstall();
 
   migrationInstructions +=
     '\n## Adjust config\n\n' +
@@ -200,6 +200,8 @@ function migrateMarkdown(fsInfo: FsInfo) {
     newContent = newContent.replace(/```(\w+)?(?:(?:[ \t])+(.+?)\r?\n)([\s\S]+?)```/g, (_, lang, title, content) => {
       return title ? `\`\`\`${lang} {% title="${title}" %}\n${content}\`\`\`` : `\`\`\`${lang}${content}\`\`\``;
     });
+    
+    newContent = newContent.replace(/^(#+)(\w)/gm, '$1 $2');
 
     // migrate indented code blocks to backtricks
     newContent = newContent.replace(/((?:^ {4,}[^`]+?\n)+)/g, (_, r) => `\`\`\`\n${r.replace(/^ {4,}/, '')}\`\`\``);
@@ -312,7 +314,7 @@ function migrateSidebars(fsInfo: FsInfo) {
         if (fs.existsSync(file + '.md') || fs.existsSync(file + '.page.tsx') || fs.existsSync(file + '.page.yaml')) {
           return {
             ...item,
-            group: item.group || '',
+            group: item.pages ? item.label || item.group || '' : undefined,
             page: item.href,
             href: undefined,
           };
@@ -339,7 +341,7 @@ function migrateSidebars(fsInfo: FsInfo) {
         return migrateRbac(
           migrateHref({
             ...item,
-            group: item.group || '',
+            group: item.pages ? item.label || item.group || '' : undefined,
             pages: undefined,
             items: transformSidebarItems(item.pages, filePath),
           })
@@ -377,7 +379,7 @@ function migrateSidebars(fsInfo: FsInfo) {
           }
           return migrateRbac({
             ...item,
-            group: item.label || item.group || '',
+            group: item.pages ? item.label || item.group || '' : undefined,
             page: path.relative(path.dirname(filePath), renamedFiles[pageYamlFile]),
           });
         }
@@ -436,6 +438,11 @@ async function migratePackageJson() {
   const version = execSync(`npm show ${product} version`).toString().trim();
 
   packageJson.dependencies[product] = version;
+  if (packageJson.devDependencies) {
+    if (packageJson.devDependencies['@redocly/cli']) {
+      packageJson.devDependencies['@redocly/cli'] = '^2.0.0';
+    }
+  }
   if (packageJson.scripts) {
     if (packageJson.scripts['start']) {
       packageJson.scripts['start'] = packageJson.scripts['start'].includes('redocly-portal')
@@ -1071,6 +1078,7 @@ async function tryFetchRemoteDefinition(definitionPath: string) {
           token = '';
           console.log(red('Invalid token provided. Skipping download of remote OpenAPI files'));
         }
+        console.log(green('✔ http') + ' ' + blue(definitionPath));
         if (res.ok) {
           return res.text();
         }

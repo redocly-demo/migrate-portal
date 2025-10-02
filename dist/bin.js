@@ -2771,6 +2771,7 @@ async function migrate() {
   if (fs.existsSync("theme.ts")) {
     fs.unlinkSync("theme.ts");
   }
+  runNpmInstall();
   migrationInstructions += `
 ## Adjust config
 
@@ -2793,6 +2794,12 @@ Remove this \`_MIGRATION.md\` file after migration.`;
     fs.writeFileSync("_MIGRATION.md", migrationInstructions);
   }
   console.log("Please, review the changes and commit them.");
+}
+function runNpmInstall() {
+  console.log(blue("\u2192 Running npm install"));
+  if (fs.existsSync("yarn.lock")) fs.unlinkSync("yarn.lock");
+  if (fs.existsSync("package-lock.json")) fs.unlinkSync("package-lock.json");
+  (0, import_node_child_process.execSync)("npm install -f", { stdio: "inherit" });
 }
 function migrateMarkdown(fsInfo) {
   console.log(blue("\u2192 Migrating markdown files"));
@@ -2830,6 +2837,7 @@ ${text}${whitespace.slice(
       return title ? `\`\`\`${lang} {% title="${title}" %}
 ${content2}\`\`\`` : `\`\`\`${lang}${content2}\`\`\``;
     });
+    newContent = newContent.replace(/^(#+)(\w)/gm, "$1 $2");
     newContent = newContent.replace(/((?:^ {4,}[^`]+?\n)+)/g, (_, r) => `\`\`\`
 ${r.replace(/^ {4,}/, "")}\`\`\``);
     const codeBlockPositions = [];
@@ -2925,7 +2933,7 @@ function migrateSidebars(fsInfo) {
         if (fs.existsSync(file + ".md") || fs.existsSync(file + ".page.tsx") || fs.existsSync(file + ".page.yaml")) {
           return {
             ...item,
-            group: item.group || "",
+            group: item.pages ? item.label || item.group || "" : void 0,
             page: item.href,
             href: void 0
           };
@@ -2948,7 +2956,7 @@ function migrateSidebars(fsInfo) {
         return migrateRbac2(
           migrateHref({
             ...item,
-            group: item.group || "",
+            group: item.pages ? item.label || item.group || "" : void 0,
             pages: void 0,
             items: transformSidebarItems(item.pages, filePath)
           })
@@ -2984,7 +2992,7 @@ function migrateSidebars(fsInfo) {
           }
           return migrateRbac2({
             ...item,
-            group: item.label || item.group || "",
+            group: item.pages ? item.label || item.group || "" : void 0,
             page: path.relative(path.dirname(filePath), renamedFiles[pageYamlFile])
           });
         }
@@ -3033,6 +3041,11 @@ async function migratePackageJson() {
   const product = PACKAGES[choice - 1];
   const version = (0, import_node_child_process.execSync)(`npm show ${product} version`).toString().trim();
   packageJson.dependencies[product] = version;
+  if (packageJson.devDependencies) {
+    if (packageJson.devDependencies["@redocly/cli"]) {
+      packageJson.devDependencies["@redocly/cli"] = "^2.0.0";
+    }
+  }
   if (packageJson.scripts) {
     if (packageJson.scripts["start"]) {
       packageJson.scripts["start"] = packageJson.scripts["start"].includes("redocly-portal") ? packageJson.scripts["start"].replace("redocly-portal develop", "npx @redocly/cli preview") : "npx @redocly/cli preview";
@@ -3567,6 +3580,7 @@ async function tryFetchRemoteDefinition(definitionPath) {
         token = "";
         console.log(red("Invalid token provided. Skipping download of remote OpenAPI files"));
       }
+      console.log(green("\u2714 http") + " " + blue(definitionPath));
       if (res.ok) {
         return res.text();
       }
